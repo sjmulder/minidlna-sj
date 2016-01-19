@@ -854,7 +854,7 @@ callback(void *args, int argc, char **argv, char **azColName)
 					strcpy(mime+6, "mpeg");
 				}
 			}
-			if( (passed_args->flags & FLAG_CAPTION_RES) ||
+			if( (force_caption_response || (passed_args->flags & FLAG_CAPTION_RES)) ||
 			    (passed_args->filter & (FILTER_SEC_CAPTION_INFO_EX|FILTER_PV_SUBTITLE)) )
 			{
 				if( sql_get_int_field(db, "SELECT ID from CAPTIONS where ID = '%s'", detailID) > 0 )
@@ -1057,24 +1057,24 @@ callback(void *args, int argc, char **argv, char **azColName)
 				case ELGDevice:
 				case EAsusOPlay:
 				default:
-					if( passed_args->flags & FLAG_HAS_CAPTIONS )
-					{
-						if( passed_args->flags & FLAG_CAPTION_RES )
-							ret = strcatf(str, "&lt;res protocolInfo=\"http-get:*:text/srt:*\"&gt;"
-									     "http://%s:%d/Captions/%s.srt"
-									   "&lt;/res&gt;",
-									   lan_addr[passed_args->iface].str, runtime_vars.port, detailID);
-						else if( passed_args->filter & FILTER_SEC_CAPTION_INFO_EX )
+						if( (passed_args->flags & FLAG_HAS_CAPTIONS) &&
+						    (passed_args->filter & FILTER_SEC_CAPTION_INFO_EX) )
 							ret = strcatf(str, "&lt;sec:CaptionInfoEx sec:type=\"srt\"&gt;"
-							                     "http://%s:%d/Captions/%s.srt"
+							                   "http://%s:%d/Captions/%s.srt"
 							                   "&lt;/sec:CaptionInfoEx&gt;",
 							                   lan_addr[passed_args->iface].str, runtime_vars.port, detailID);
-					}
 					free(alt_title);
 					break;
 				}
 			}
 		}
+		if( *mime == 'v' && (passed_args->flags & FLAG_HAS_CAPTIONS) &&
+		    (force_caption_response ||
+		    ((passed_args->filter & FILTER_RES) && (passed_args->flags & FLAG_CAPTION_RES))) )
+				ret = strcatf(str, "&lt;res protocolInfo=\"http-get:*:text/srt:*\"&gt;"
+				                   "http://%s:%d/Captions/%s.srt"
+				                   "&lt;/res&gt;",
+				                   lan_addr[passed_args->iface].str, runtime_vars.port, detailID);
 		if( NON_ZERO(album_art) )
 		{
 			/* Video and audio album art is handled differently */

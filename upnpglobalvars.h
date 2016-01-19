@@ -235,5 +235,6 @@ extern short int scanning;
 extern volatile short int quitting;
 extern volatile uint32_t updateID;
 extern const char *force_sort_criteria;
+short int force_caption_response;
 
 #endif

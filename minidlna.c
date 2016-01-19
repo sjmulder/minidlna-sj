@@ -738,6 +738,13 @@ init(int argc, char **argv)
 			if (strtobool(ary_options[i].value))
 				SETFLAG(MERGE_MEDIA_DIRS_MASK);
 			break;
+		case FORCE_CAPTION_RESPONSE:
+			if( strtobool(ary_options[i].value) )
+			{
+				DPRINTF(E_WARN, L_GENERAL, "Using force caption response\n");
+				force_caption_response = 1;
+			}
+			break;
 		default:
 			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n",
 				optionsfile);
