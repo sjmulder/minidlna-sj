@@ -57,6 +57,7 @@ enum upnpconfigoptions {
 	USER_ACCOUNT,			/* user account to run as */
 	FORCE_SORT_CRITERIA,		/* force sorting by a given sort criteria */
 	MAX_CONNECTIONS,		/* maximum number of simultaneous connections */
+	ON_CONNECTION,			/* shell script to be executed on connection acceptance */
 	MERGE_MEDIA_DIRS		/* don't add an extra directory level when there are multiple media dirs */
 };
 

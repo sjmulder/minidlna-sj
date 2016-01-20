@@ -17,11 +17,14 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <time.h>
 
 #include "clients.h"
 #include "getifaddr.h"
 #include "log.h"
+#include "options.h"
+#include "upnpglobalvars.h"
 
 struct client_type_s client_types[] =
 {
@@ -293,6 +296,23 @@ AddClientCache(struct in_addr addr, int type)
 					client_types[type].name, inet_ntoa(clients[i].addr),
 					clients[i].mac[0], clients[i].mac[1], clients[i].mac[2],
 					clients[i].mac[3], clients[i].mac[4], clients[i].mac[5], i);
+
+		if (runtime_vars.on_connection)
+		{
+			static const char fmt[] = "CLIENT_ADDRESS=%s; %s";
+			char cmd[MAX_OPTION_VALUE_LEN + sizeof(fmt) * 2];
+			const int rc = snprintf(cmd,
+						sizeof(cmd),
+						fmt,
+						inet_ntoa(addr),
+						runtime_vars.on_connection
+					); /* sprintf cmd */
+			if (rc > 0 && rc < sizeof(cmd))
+			{
+				system(cmd);
+			}
+		}
+
 		return &clients[i];
 	}
 
