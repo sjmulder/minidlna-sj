@@ -60,6 +60,8 @@ enum upnpconfigoptions {
 	MERGE_MEDIA_DIRS,		/* don't add an extra directory level when there are multiple media dirs */
 	WIDE_LINKS,			/* allow following symlinks outside the defined media_dirs */
 	TIVO_DISCOVERY,			/* TiVo discovery protocol: bonjour or beacon. Defaults to bonjour if supported */
+	META_KEEP,			/* keep metadata for fast rebuilding of the database */
+	META_KEEP_MEDIA, 		/* keep the metadata with the media in a .meta folder */
 };
 
 /* readoptionsfile()

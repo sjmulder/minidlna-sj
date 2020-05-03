@@ -67,6 +67,8 @@ static const struct {
 	{ MERGE_MEDIA_DIRS, "merge_media_dirs" },
 	{ WIDE_LINKS, "wide_links" },
 	{ TIVO_DISCOVERY, "tivo_discovery" },
+	{ META_KEEP, "keep_metadata" },
+	{ META_KEEP_MEDIA, "keep_metadata_with_media" },
 };
 
 int
