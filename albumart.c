@@ -27,12 +27,16 @@
 
 #include <jpeglib.h>
 
+#include <libffmpegthumbnailer/videothumbnailerc.h>
+
 #include "upnpglobalvars.h"
 #include "albumart.h"
 #include "sql.h"
 #include "utils.h"
 #include "image_utils.h"
 #include "log.h"
+
+
 
 int
 art_cache_exists(const char * orig_path, char ** cache_file)
@@ -280,7 +284,8 @@ check_for_album_file(char * dir, const char * path)
 	char * art_file;
 
 	/* First look for file-specific cover art */
-	sprintf(file, "%s.cover.jpg", path);
+	//sprintf(file, "%s.cover.jpg", path);
+	sprintf(file, "%s.jpg", path);
 	if( access(file, R_OK) == 0 )
 	{
 		if( art_cache_exists(file, &art_file) )
@@ -336,6 +341,32 @@ found_file:
 	return NULL;
 }
 
+/*
+ * generates jpegs for movies as thumbnail files. The new thumbs have the name of the movie, with an ".jpg" 
+ * appended. The thumbs are created with the minidlna-user (e.g. root).
+ */
+char *
+generate_albumart(char * dir, const char * path)
+{
+    int rc;
+    char * thumbfile = malloc(PATH_MAX);
+    
+    /* DPRINTF(E_DEBUG, L_METADATA, "generate_albumart - dir: %s, path: %s\n", dir, path); */
+
+    if (ends_with(path, ".avi") || ends_with(path, ".mkv") || ends_with(path, ".mpg")) {
+        video_thumbnailer* vt = video_thumbnailer_create();
+        vt->thumbnail_image_type = Jpeg;
+        /* DPRINTF(E_DEBUG, L_METADATA, "generate_albumart - movie\n"); */
+        sprintf(thumbfile, "%s.jpg", path);
+
+        rc = video_thumbnailer_generate_thumbnail_to_file(vt, path, thumbfile);
+        DPRINTF(E_DEBUG, L_METADATA, "rc: %d\n", rc);
+        video_thumbnailer_destroy(vt);
+        return thumbfile;
+    }
+    return 0;
+}
+
 sqlite_int64
 find_album_art(const char * path, const char * image_data, int image_size)
 {
@@ -346,22 +377,27 @@ find_album_art(const char * path, const char * image_data, int image_size)
 	sqlite_int64 ret = 0;
 	char * mypath = strdup(path);
 
-	if( (image_size && (album_art = check_embedded_art(path, image_data, image_size))) ||
-	    (album_art = check_for_album_file(dirname(mypath), path)) )
-	{
-		sql = sqlite3_mprintf("SELECT ID from ALBUM_ART where PATH = '%q'", album_art ? album_art : path);
-		if( (sql_get_table(db, sql, &result, &rows, &cols) == SQLITE_OK) && rows )
-		{
-			ret = strtoll(result[1], NULL, 10);
-		}
-		else
-		{
-			if( sql_exec(db, "INSERT into ALBUM_ART (PATH) VALUES ('%q')", album_art) == SQLITE_OK )
-				ret = sqlite3_last_insert_rowid(db);
-		}
-		sqlite3_free_table(result);
-		sqlite3_free(sql);
-	}
+
+    album_art = check_embedded_art(path, image_data, image_size);
+    if (!album_art) album_art = check_for_album_file(dirname(mypath), path);
+    if (!album_art) album_art = generate_albumart(dirname(mypath), path);
+
+    if (album_art) 
+    {
+        sql = sqlite3_mprintf("SELECT ID from ALBUM_ART where PATH = '%q'", album_art ? album_art : path);
+        if( (sql_get_table(db, sql, &result, &rows, &cols) == SQLITE_OK) && rows )
+        {
+            ret = strtoll(result[1], NULL, 10);
+        }
+        else
+        {
+            if( sql_exec(db, "INSERT into ALBUM_ART (PATH) VALUES ('%q')", album_art) == SQLITE_OK )
+                ret = sqlite3_last_insert_rowid(db);
+        }
+        sqlite3_free_table(result);
+        sqlite3_free(sql);
+    }
+
 	if( album_art )
 		free(album_art);
 	free(mypath);

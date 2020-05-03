@@ -87,6 +87,7 @@ struct upnphttp {
 #define FLAG_MIME_AVI_AVI       0x00400000
 #define FLAG_MIME_FLAC_FLAC     0x00800000
 #define FLAG_NO_RESIZE          0x01000000
+#define FLAG_MEDIA_INFO         0x02000000
 
 /* New_upnphttp() */
 struct upnphttp *
@@ -147,5 +148,8 @@ SendResp_thumbnail(struct upnphttp *, char * url);
  * send the actual file data for a UPnP-A/V or DLNA request. */
 void
 SendResp_dlnafile(struct upnphttp *, char * url);
+void
+SendResp_samsung_mta_file(struct upnphttp * h, char * object);
+
 #endif
 
