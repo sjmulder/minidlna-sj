@@ -725,7 +725,7 @@ GetVideoMetadataLite(const char * path, char * name)
 
 		long long int pi0 = strtoll(meta[0], NULL, 10);
 		long int pi1 = strtol(meta[1], NULL, 10);
-		long long int pi15 = strtoll(meta[15], NULL, 10);
+		long long int pi15 = find_album_art(path, 0, 0);
 
 		ret = sql_exec(db, "INSERT into DETAILS"
 			" (PATH, SIZE, TIMESTAMP, DURATION, DATE, CHANNELS, BITRATE, SAMPLERATE, RESOLUTION,"
