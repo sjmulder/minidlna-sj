@@ -477,6 +477,22 @@ Send400(struct upnphttp * h)
 	CloseSocket_upnphttp(h);
 }
 
+/* very minimalistic 401 error message */
+static void
+Send401(struct upnphttp * h)
+{
+	static const char body401[] =
+		"<HTML><HEAD><TITLE>401 Access denied.</TITLE></HEAD>"
+		"<BODY><H1>Access denied.</H1>"
+		"</BODY></HTML>\r\n";
+	h->respflags = FLAG_HTML;
+	BuildResp2_upnphttp(h, 401, "Access denied",
+	                    body401, sizeof(body401) - 1);
+	SendResp_upnphttp(h);
+	CloseSocket_upnphttp(h);
+}
+
+
 /* very minimalistic 403 error message */
 static void
 Send403(struct upnphttp * h)
@@ -855,6 +871,35 @@ ProcessHttpQuery_upnphttp(struct upnphttp * h)
 	}
 
 	ParseHttpHeaders(h);
+
+	if(allowed_macs) {
+		/* see if the client is authorized */
+		unsigned char mac[6];
+		if(!get_remote_mac(h->clientaddr, mac)) {
+			int found=0;
+			struct allowed_mac_s *some_mac=allowed_macs;
+			while(some_mac) {
+				if(memcmp(some_mac->mac, mac, 6)==0) { /* mac found */
+					found=1;
+					break;
+				}
+				some_mac=some_mac->next;
+			}
+			if(!found) {
+				/* clients has no allowed mac, send access denied */
+				DPRINTF(E_DEBUG, L_HTTP, "Client with IP %s has MAC %02X:%02X:%02X:%02X:%02X:%02X which is not configured to be allowed. Sending access denied.\n", inet_ntoa(h->clientaddr), mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+				Send401(h);
+				return;
+			}
+		}
+		else {
+			/* only clients with mac allowed, send access denied */
+			DPRINTF(E_DEBUG, L_HTTP, "Client with IP %s has no visible MAC. Access only allowed for clients with whitelisted MAC. Sending access denied.\n", inet_ntoa(h->clientaddr));
+			Send401(h);
+			return;
+		}
+	}
+
 
 	/* see if we need to wait for remaining data */
 	if( (h->reqflags & FLAG_CHUNKED) )

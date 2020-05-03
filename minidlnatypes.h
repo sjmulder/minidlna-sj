@@ -78,6 +78,11 @@ struct media_dir_s {
  	struct media_dir_s *next;
 };
 
+struct allowed_mac_s {
+	unsigned char mac[6];
+	struct allowed_mac_s * next;
+};
+
 struct album_art_name_s {
 	char *name;             /* base path */
 	uint8_t wildcard;
