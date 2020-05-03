@@ -738,12 +738,17 @@ add_res(char *size, char *duration, char *bitrate, char *sampleFrequency,
 }
 
 static int
-get_child_count(const char *object, struct magic_container_s *magic)
+get_child_count(const char *object, struct magic_container_s *magic, const char *req_mac)
 {
 	int ret;
 
 	if (magic && magic->child_count)
-		ret = sql_get_int_field(db, "SELECT count(*) from %s", magic->child_count);
+	{
+		if (strncmp(object+1, "$FF1", 4) == 0)
+			ret = sql_get_int_field(db, "SELECT COUNT(*), %Q AS req_mac FROM %s", req_mac, magic->child_count);
+		else
+			ret = sql_get_int_field(db, "SELECT count(*) from %s", magic->child_count);
+	}
 	else if (magic && magic->objectid && *(magic->objectid))
 		ret = sql_get_int_field(db, "SELECT count(*) from OBJECTS where PARENT_ID = '%s';", *(magic->objectid));
 	else
@@ -764,7 +769,7 @@ object_exists(const char *object)
 #define COLUMNS "o.DETAIL_ID, o.CLASS," \
                 " d.SIZE, d.TITLE, d.DURATION, d.BITRATE, d.SAMPLERATE, d.ARTIST," \
                 " d.ALBUM, d.GENRE, d.COMMENT, d.CHANNELS, d.TRACK, d.DATE, d.RESOLUTION," \
-                " d.THUMBNAIL, d.CREATOR, d.DLNA_PN, d.MIME, d.ALBUM_ART, d.ROTATION, d.DISC "
+                " d.THUMBNAIL, d.CREATOR, d.DLNA_PN, d.MIME, d.ALBUM_ART, d.ROTATION, d.DISC, %Q AS req_mac "
 #define SELECT_COLUMNS "SELECT o.OBJECT_ID, o.PARENT_ID, o.REF_ID, " COLUMNS
 
 #define NON_ZERO(x) (x && atoi(x))
@@ -778,6 +783,7 @@ callback(void *args, int argc, char **argv, char **azColName)
 	     *duration = argv[7], *bitrate = argv[8], *sampleFrequency = argv[9], *artist = argv[10], *album = argv[11],
 	     *genre = argv[12], *comment = argv[13], *nrAudioChannels = argv[14], *track = argv[15], *date = argv[16], *resolution = argv[17],
 	     *tn = argv[18], *creator = argv[19], *dlna_pn = argv[20], *mime = argv[21], *album_art = argv[22], *rotate = argv[23];
+	char *req_mac = argv[25];
 	char dlna_buf[128];
 	const char *ext;
 	struct string_s *str = passed_args->str;
@@ -1117,7 +1123,7 @@ callback(void *args, int argc, char **argv, char **azColName)
 			ret = strcatf(str, "searchable=\"%d\" ", check_magic_container(id, passed_args->flags) ? 0 : 1);
 		}
 		if( passed_args->filter & FILTER_CHILDCOUNT ) {
-			ret = strcatf(str, "childCount=\"%d\"", get_child_count(id, check_magic_container(id, passed_args->flags)));
+			ret = strcatf(str, "childCount=\"%d\"", get_child_count(id, check_magic_container(id, passed_args->flags), req_mac));
 		}
 		/* If the client calls for BrowseMetadata on root, we have to include our "upnp:searchClass"'s, unless they're filtered out */
 		if( passed_args->requested == 1 && strcmp(id, "0") == 0 && (passed_args->filter & FILTER_UPNP_SEARCHCLASS) ) {
@@ -1192,6 +1198,7 @@ BrowseContentDirectory(struct upnphttp * h, const char * action)
 	const char *objectid_sql = "o.OBJECT_ID";
 	const char *parentid_sql = "o.PARENT_ID";
 	const char *refid_sql = "o.REF_ID";
+	const char *left_join = NULL;
 	char where[256] = "";
 	char *orderBy = NULL;
 	struct NameValueParserData data;
@@ -1279,7 +1286,7 @@ BrowseContentDirectory(struct upnphttp * h, const char * action)
 		sql = sqlite3_mprintf("SELECT %s, %s, %s, " COLUMNS
 				      "from OBJECTS o left join DETAILS d on (d.ID = o.DETAIL_ID)"
 				      " where OBJECT_ID = '%q';",
-				      objectid_sql, parentid_sql, refid_sql, id);
+				      objectid_sql, parentid_sql, refid_sql, h->req_client->macstr, id);
 		ret = sqlite3_exec(db, sql, callback, (void *) &args, &zErrMsg);
 		totalMatches = args.returned;
 	}
@@ -1296,12 +1303,16 @@ BrowseContentDirectory(struct upnphttp * h, const char * action)
 				parentid_sql = magic->parentid_sql;
 			if (magic->refid_sql)
 				refid_sql = magic->refid_sql;
+			if (magic->left_join)
+				left_join = magic->left_join;
 			if (magic->where)
 				strncpyt(where, magic->where, sizeof(where));
+			if (magic->orderby)
+				ret = asprintf(&orderBy, magic->orderby);
 			if (magic->max_count > 0)
 			{
 				int limit = MAX(magic->max_count - StartingIndex, 0);
-				ret = get_child_count(ObjectID, magic);
+				ret = get_child_count(ObjectID, magic, h->req_client->macstr);
 				totalMatches = MIN(ret, limit);
 				if (RequestedCount > limit || RequestedCount < 0)
 					RequestedCount = limit;
@@ -1311,9 +1322,9 @@ BrowseContentDirectory(struct upnphttp * h, const char * action)
 			sqlite3_snprintf(sizeof(where), where, "PARENT_ID = '%q'", ObjectID);
 
 		if (!totalMatches)
-			totalMatches = get_child_count(ObjectID, magic);
+			totalMatches = get_child_count(ObjectID, magic, h->req_client->macstr);
 		ret = 0;
-		if( SortCriteria )
+		if( SortCriteria && !orderBy )
 		{
 			__SORT_LIMIT
 			orderBy = parse_sort_criteria(SortCriteria, &ret);
@@ -1349,9 +1360,9 @@ BrowseContentDirectory(struct upnphttp * h, const char * action)
 		}
 
 		sql = sqlite3_mprintf("SELECT %s, %s, %s, " COLUMNS
-		                      "from OBJECTS o left join DETAILS d on (d.ID = o.DETAIL_ID)"
+		                      "from OBJECTS o left join DETAILS d on (d.ID = o.DETAIL_ID) %s"
 				      " where %s %s limit %d, %d;",
-				      objectid_sql, parentid_sql, refid_sql,
+				      objectid_sql, parentid_sql, refid_sql, h->req_client->macstr, THISORNUL(left_join), 
 				      where, THISORNUL(orderBy), StartingIndex, RequestedCount);
 		DPRINTF(E_DEBUG, L_HTTP, "Browse SQL: %s\n", sql);
 		ret = sqlite3_exec(db, sql, callback, (void *) &args, &zErrMsg);
@@ -1784,11 +1795,11 @@ SearchContentDirectory(struct upnphttp * h, const char * action)
 	                      " where OBJECT_ID glob '%q%s' and (%s) %s "
 	                      "%z %s"
 	                      " limit %d, %d",
-	                      ContainerID, sep, where, groupBy,
+	                      h->req_client->macstr, ContainerID, sep, where, groupBy,
 	                      (*ContainerID == '*') ? NULL :
 	                      sqlite3_mprintf("UNION ALL " SELECT_COLUMNS
 	                                      "from OBJECTS o left join DETAILS d on (d.ID = o.DETAIL_ID)"
-	                                      " where OBJECT_ID = '%q' and (%s) ", ContainerID, where),
+	                                      " where OBJECT_ID = '%q' and (%s) ", h->req_client->macstr, ContainerID, where),
 	                      orderBy, StartingIndex, RequestedCount);
 	DPRINTF(E_DEBUG, L_HTTP, "Search SQL: %s\n", sql);
 	ret = sqlite3_exec(db, sql, callback, (void *) &args, &zErrMsg);
