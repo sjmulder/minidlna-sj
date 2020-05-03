@@ -613,6 +613,32 @@ parse_sort_criteria(char *sortCriteria, int *error)
 	return order;
 }
 
+static void
+add_captions_res(struct string_s *str, const char *attr, const char *addr, int port, const char *detailID)
+{
+	char **results = NULL, *sql = NULL;
+	int i, r, rows, cols;
+
+	sql = sqlite3_mprintf("SELECT sub_id, path FROM captions WHERE detail_id = %Q;", detailID);
+	
+	r = sql_get_table(db, sql, &results, &rows, &cols);
+	if (r != SQLITE_OK)
+		goto error;
+
+	for (i = 2; i <= (rows * cols); i += 2)
+	{
+		if (i == 2)
+			strcatf(str, attr, addr, port, detailID, "", "");
+		else
+			strcatf(str, attr, addr, port, detailID, "-", results[i]);
+	}
+error:
+	if (sql)
+		sqlite3_free(sql);
+	if (results)
+		sqlite3_free_table(results);
+}
+
 inline static void
 add_resized_res(int srcw, int srch, int reqw, int reqh, char *dlna_pn,
                 char *detailID, struct Response *args)
@@ -801,10 +827,10 @@ callback(void *args, int argc, char **argv, char **azColName)
 					strcpy(mime+6, "mpeg");
 				}
 			}
-			if( (passed_args->flags & FLAG_CAPTION_RES) ||
+			if( (passed_args->flags & (FLAG_CAPTION_RES|FLAG_MULTI_CAPTION_RES)) ||
 			    (passed_args->filter & (FILTER_SEC_CAPTION_INFO_EX|FILTER_PV_SUBTITLE)) )
 			{
-				if( sql_get_int_field(db, "SELECT ID from CAPTIONS where ID = '%s'", detailID) > 0 )
+				if( sql_get_int_field(db, "SELECT 1 from CAPTIONS where DETAIL_ID = %Q;", detailID) == 1 )
 					passed_args->flags |= FLAG_HAS_CAPTIONS;
 			}
 			/* From what I read, Samsung TV's expect a [wrong] MIME type of x-mkv. */
@@ -1006,7 +1032,9 @@ callback(void *args, int argc, char **argv, char **azColName)
 				default:
 					if( passed_args->flags & FLAG_HAS_CAPTIONS )
 					{
-						if( passed_args->flags & FLAG_CAPTION_RES )
+						if( passed_args->flags & FLAG_MULTI_CAPTION_RES )
+							add_captions_res(str, "&lt;res protocolInfo=\"http-get:*:text/srt:*\"&gt;http://%s:%d/Captions/%s%s%s.srt&lt;/res&gt;", lan_addr[passed_args->iface].str, runtime_vars.port, detailID);
+						else if( passed_args->flags & FLAG_CAPTION_RES )
 							ret = strcatf(str, "&lt;res protocolInfo=\"http-get:*:text/srt:*\"&gt;"
 									     "http://%s:%d/Captions/%s.srt"
 									   "&lt;/res&gt;",

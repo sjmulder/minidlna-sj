@@ -1213,7 +1213,7 @@ void
 SendResp_upnphttp(struct upnphttp * h)
 {
 	int n;
-	DPRINTF(E_DEBUG, L_HTTP, "HTTP RESPONSE: %.*s\n", h->res_buflen, h->res_buf);
+  DPRINTF(E_DEBUG, L_HTTP, "HTTP RESPONSE: %.*s\n", h->res_buflen, h->res_buf);
 	n = send(h->socket, h->res_buf, h->res_buflen, 0);
 	if(n<0)
 	{
@@ -1449,17 +1449,25 @@ SendResp_caption(struct upnphttp * h, char * object)
 	long long id;
 	int fd;
 	struct string_s str;
-
+	char *p;
+	int subid = 0;
 	id = strtoll(object, NULL, 10);
 
-	path = sql_get_text_field(db, "SELECT PATH from CAPTIONS where ID = %lld", id);
+	p = strrchr(object, '-');
+	if (p)
+		subid = atoi(p+1);
+
+  if (subid)
+    path = sql_get_text_field(db, "SELECT path FROM captions WHERE detail_id = %lld AND sub_id = %d;", id, subid);
+  else
+    path = sql_get_text_field(db, "SELECT path FROM captions WHERE detail_id = %lld ORDER BY LENGTH(path) ASC LIMIT 1;", id);
 	if( !path )
 	{
 		DPRINTF(E_WARN, L_HTTP, "CAPTION ID %s not found, responding ERROR 404\n", object);
 		Send404(h);
 		return;
 	}
-	DPRINTF(E_INFO, L_HTTP, "Serving caption ID: %lld [%s]\n", id, path);
+	DPRINTF(E_INFO, L_HTTP, "Serving caption ID: [%lld,%d] [%s]\n", id, subid, path);
 
 	fd = open(path, O_RDONLY);
 	if( fd < 0 ) {
@@ -1975,7 +1983,7 @@ SendResp_dlnafile(struct upnphttp *h, char *object)
 
 	if( h->reqflags & FLAG_CAPTION )
 	{
-		if( sql_get_int_field(db, "SELECT ID from CAPTIONS where ID = '%lld'", (long long)id) > 0 )
+		if( sql_get_int_field(db, "SELECT 1 FROM captions WHERE detail_id = '%lld' LIMIT 1", (long long) id) == 1 )
 			strcatf(&str, "CaptionInfo.sec: http://%s:%d/Captions/%lld.srt\r\n",
 			              lan_addr[h->iface].str, runtime_vars.port, (long long)id);
 	}

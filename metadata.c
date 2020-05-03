@@ -56,6 +56,12 @@
 #define FLAG_DURATION	0x00000200
 #define FLAG_RESOLUTION	0x00000400
 
+#if SCANDIR_CONST
+typedef const struct dirent scan_filter;
+#else
+typedef struct dirent scan_filter;
+#endif
+
 /* Audio profile flags */
 enum audio_profiles {
 	PROFILE_AUDIO_UNKNOWN,
@@ -115,45 +121,70 @@ dlna_timestamp_is_present(const char *filename, int *raw_packet_size)
 	return 0;
 }
 
+static int
+filter_caption(scan_filter *d)
+{
+  return (d->d_name[0] != '.' && is_caption(d->d_name));
+}
+
 void
 check_for_captions(const char *path, int64_t detailID)
 {
-	char file[MAXPATHLEN];
-	char *p;
-	int ret;
-
-	strncpyt(file, path, sizeof(file));
-	p = strip_ext(file);
-	if (!p)
-		p = strrchr(file, '\0');
-
-	/* If we weren't given a detail ID, look for one. */
+	struct dirent **namelist = NULL;
+	struct stat st;
+	int i, n, subid = 1, fsiz;
+	char *p, *dir, *name, *fbase, buf[PATH_MAX], full_path[PATH_MAX];
+  /* from inotify */
 	if (!detailID)
 	{
-		detailID = sql_get_int64_field(db, "SELECT ID from DETAILS where (PATH > '%q.' and PATH <= '%q.z')"
-		                            " and MIME glob 'video/*' limit 1", file, file);
-		if (detailID <= 0)
-		{
-			//DPRINTF(E_MAXDEBUG, L_METADATA, "No file found for caption %s.\n", path);
+		if (sql_get_int_field(db, "SELECT 1 FROM captions WHERE path = %Q", path) == 1)
 			return;
+
+		strcpy(buf, path);
+		for (i = 0; i < 2 && !detailID; i++)
+		{
+			p = strip_ext(buf);
+			if (!p)
+				break;
+			detailID = sql_get_int64_field(db, "SELECT id FROM details WHERE (path > '%q.' AND path <= '%q.z') AND mime like 'video/%%' LIMIT 1", buf);
 		}
-	}
+		if (detailID)
+		{
+			subid = sql_get_int_field(db, "SELECT MAX(sub_id) FROM captions WHERE detail_id = %lld", detailID);
+			if (subid < 1)
+				subid = 1;
+			else	
+				subid++;
 
-	strcpy(p, ".srt");
-	ret = access(file, R_OK);
-	if (ret != 0)
-	{
-		strcpy(p, ".smi");
-		ret = access(file, R_OK);
+			DPRINTF(E_DEBUG, L_METADATA, "Caption found [%lld,%d] %s\n", (long long) detailID, subid, path);
+			sql_exec(db, "INSERT INTO captions (detail_id, sub_id, path) VALUES (%lld, %d, %Q)", (long long) detailID, subid, path);
+		}
+		return;
 	}
-
-	if (ret == 0)
+  /* from scanner */
+	strcpy(buf, path);
+	fbase = basename(buf);
+	p = strip_ext(fbase);
+	if (!p)
+		p = strrchr(fbase, '\0');
+	fsiz = strlen(fbase);
+	dir = dirname(buf);
+	n = scandir(dir, &namelist, filter_caption, alphasort);
+	for (i = 0; i < n; i++)
 	{
-		sql_exec(db, "INSERT into CAPTIONS"
-		             " (ID, PATH) "
-		             "VALUES"
-		             " (%lld, %Q)", detailID, file);
+		name = namelist[i]->d_name;
+		if (strncmp(fbase, name, fsiz) == 0)
+		{
+			snprintf(full_path, PATH_MAX, "%s/%s", dir, name);
+			if (stat(full_path, &st) == 0)
+			{
+				DPRINTF(E_DEBUG, L_METADATA, "Caption found [%lld,%d] %s\n", (long long) detailID, subid, full_path);
+				sql_exec(db, "INSERT INTO captions (detail_id, sub_id, path) VALUES (%lld, %d, %Q)", (long long) detailID, subid++, full_path); 
+			}
+		}
+		free(namelist[i]);
 	}
+	free(namelist);
 }
 
 void

@@ -96,7 +96,7 @@ struct client_type_s client_types[] =
 
 	/* User-Agent: IPI/1.0 UPnP/1.0 DLNADOC/1.50 */
 	{ ENetFrontLivingConnect,
-	  FLAG_DLNA | FLAG_FORCE_SORT | FLAG_CAPTION_RES,
+	  FLAG_DLNA | FLAG_FORCE_SORT | FLAG_CAPTION_RES | FLAG_MULTI_CAPTION_RES,
 	  "NetFront Living Connect",
 	  "IPI/1",
 	  EUserAgent
@@ -136,7 +136,7 @@ struct client_type_s client_types[] =
 
 	/* User-Agent: Linux/2.6.31-1.0 UPnP/1.0 DLNADOC/1.50 INTEL_NMPR/2.0 LGE_DLNA_SDK/1.5.0 */
 	{ ELGDevice,
-	  FLAG_DLNA | FLAG_CAPTION_RES,
+	  FLAG_DLNA | FLAG_CAPTION_RES | FLAG_MULTI_CAPTION_RES,
 	  "LG",
 	  "LGE_DLNA_SDK",
 	  EUserAgent
@@ -208,14 +208,14 @@ struct client_type_s client_types[] =
 	},
 
 	{ EAsusOPlay,
-	  FLAG_DLNA | FLAG_MIME_AVI_AVI | FLAG_CAPTION_RES,
+	  FLAG_DLNA | FLAG_MIME_AVI_AVI | FLAG_CAPTION_RES | FLAG_MULTI_CAPTION_RES,
 	  "Asus OPlay Mini/Mini+",
 	  "O!Play",
 	  EUserAgent
 	},
 
 	{ EBubbleUPnP,
-	  FLAG_CAPTION_RES,
+	  FLAG_CAPTION_RES | FLAG_MULTI_CAPTION_RES,
 	  "BubbleUPnP",
 	  "BubbleUPnP",
 	  EUserAgent

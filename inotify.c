@@ -598,6 +598,7 @@ inotify_remove_file(const char * path)
 		/* Now delete the actual objects */
 		sql_exec(db, "DELETE from DETAILS where ID = %lld", detailID);
 		sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
+		sql_exec(db, "DELETE from CAPTIONS where DETAIL_ID = %lld", detailID);
 	}
 	snprintf(art_cache, sizeof(art_cache), "%s/art_cache%s", db_path, path);
 	remove(art_cache);
@@ -627,6 +628,7 @@ inotify_remove_directory(int fd, const char * path)
 				detailID = strtoll(result[i], NULL, 10);
 				sql_exec(db, "DELETE from DETAILS where ID = %lld", detailID);
 				sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
+		    sql_exec(db, "DELETE from CAPTIONS where DETAIL_ID = %lld", detailID);
 			}
 			ret = 0;
 		}
