@@ -738,6 +738,14 @@ init(int argc, char **argv)
 			if (strtobool(ary_options[i].value))
 				SETFLAG(MERGE_MEDIA_DIRS_MASK);
 			break;
+		case PREPEND_TRACK_NUMBER:
+			if (strtobool(ary_options[i].value))
+				SETFLAG(PREPEND_TRACK_MASK);
+			break;
+		case PREPEND_DISC_NUMBER:
+			if (strtobool(ary_options[i].value))
+				SETFLAG(PREPEND_DISC_MASK);
+			break;
 		default:
 			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n",
 				optionsfile);
