@@ -562,6 +562,12 @@ init(int argc, char * * argv)
 			printf("Version " MINIDLNA_VERSION "\n");
 			exit(0);
 			break;
+        case 'u':
+            if (i+1 < argc)
+                memcpy(uuidvalue+5, argv[++i], strlen(argv[i])-1);
+            else
+                fprintf(stderr, "Option -%c takes one argument.\n", argv[i][1]);
+            break;
 		default:
 			fprintf(stderr, "Unknown option: %s\n", argv[i]);
 		}
@@ -589,17 +595,21 @@ init(int argc, char * * argv)
 			/*"[-l logfile] " not functionnal */
 			"\t\t[-s serial] [-m model_number] \n"
 			"\t\t[-t notify_interval] [-P pid_filename]\n"
-			"\t\t[-w url] [-R] [-V] [-h]\n"
+			"\t\t[-w url] [-u uuid] [-R] [-V] [-h]\n"
 		        "\nNotes:\n\tNotify interval is in seconds. Default is 895 seconds.\n"
 			"\tDefault pid file is %s.\n"
 			"\tWith -d minidlna will run in debug mode (not daemonize).\n"
 			"\t-w sets the presentation url. Default is http address on port 80\n"
 			"\t-h displays this text\n"
 			"\t-R forces a full rescan\n"
+            "\t-u sets the UUID to use\n"
 			"\t-V print the version number\n",
 		        argv[0], pidfilename);
 		return 1;
 	}
+
+    /* Change db path to reflect UUID */
+    strcat(db_path, uuidvalue);
 
 	if(debug_flag)
 	{
