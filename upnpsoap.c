@@ -1682,11 +1682,13 @@ SearchContentDirectory(struct upnphttp * h, const char * action)
 	int ret;
 	const char *ContainerID;
 	char *Filter, *SearchCriteria, *SortCriteria;
-	char *orderBy = NULL, *where = NULL, sep[] = "$*";
+	char *orderBy = NULL, *where = NULL, *BKrequest = NULL, *BKrequestcount = NULL, sep[] = "$*";
 	char groupBy[] = "group by DETAIL_ID";
+	char *bksearch;
 	struct NameValueParserData data;
 	int RequestedCount = 0;
 	int StartingIndex = 0;
+	char BKcustomization = 0;
 
 	memset(&args, 0, sizeof(args));
 	memset(&str, 0, sizeof(str));
@@ -1754,13 +1756,119 @@ SearchContentDirectory(struct upnphttp * h, const char * action)
 	where = parse_search_criteria(SearchCriteria, sep);
 	DPRINTF(E_DEBUG, L_HTTP, "Translated SearchCriteria: %s\n", where);
 
-	totalMatches = sql_get_int_field(db, "SELECT (select count(distinct DETAIL_ID)"
-	                                     " from OBJECTS o left join DETAILS d on (o.DETAIL_ID = d.ID)"
-	                                     " where (OBJECT_ID glob '%q%s') and (%s))"
-	                                     " + "
-	                                     "(select count(*) from OBJECTS o left join DETAILS d on (o.DETAIL_ID = d.ID)"
-	                                     " where (OBJECT_ID = '%q') and (%s))",
-	                                     ContainerID, sep, where, ContainerID, where);
+	bksearch = strstr(where, "o.CLASS = \"container.album.musicAlbum\" and d.TITLE like \"%");
+	if (bksearch)
+	{
+	    /*
+	      We assume that parse_search_criteria is of the shape
+	         o.CLASS = "container.album.musicAlbum" and d.TITLE like "%mozart piano%"
+	      and nothing else.  The string "%mozart piano%" is therefore where+56.
+	    */
+	    char *p;
+
+		bksearch += 58;
+		if ((p = strstr(bksearch, "%\"")))
+		{
+			*p = 0;
+	        /*
+			  searchtranslated must be:
+			  mozart* piano*
+	        */
+			char *bksearchtranslated = malloc(strlen(bksearch)*2 + 1), *q;
+			size_t templength;
+
+			if (!bksearchtranslated)
+				goto BKfailed;
+			q = bksearchtranslated;
+			for (p = strtok(bksearch, " "); p; p = strtok(NULL, " "))
+			{
+				templength = strlen(p);
+				memcpy(q, p, templength);
+				q += templength;
+				*q++ = '*';
+				*q++ = ' ';
+			}
+			if (q > bksearchtranslated)
+				q--;
+			*q = 0;
+
+			DPRINTF(E_DEBUG, L_HTTP, "Translated search: <%s>\n", bksearchtranslated);
+
+	        if (asprintf(&BKrequest,
+					 "SELECT o.OBJECT_ID, o.PARENT_ID, o.REF_ID, o.DETAIL_ID, o.CLASS, d.SIZE, d.TITLE, d.DURATION, d.BITRATE, d.SAMPLERATE, d.ARTIST, d.ALBUM, d.GENRE, d.COMMENT, d.CHANNELS, "
+					 "d.TRACK, d.DATE, d.RESOLUTION, d.THUMBNAIL, d.CREATOR, d.DLNA_PN, d.MIME, d.ALBUM_ART, d.ROTATION, d.DISC "
+					 "from bk f left join DETAILS d on (d.ID = f.DETAIL_ID) "
+					 "left join OBJECTS o on (f.DETAIL_ID = o.DETAIL_ID) "
+					 "where o.REF_ID is NULL and o.OBJECT_ID glob '*$*' and f.CONTENT MATCH '%s' "
+					 "group by o.DETAIL_ID   limit %d, %d",
+						 bksearchtranslated, StartingIndex, RequestedCount) == -1)
+				BKrequest = NULL;
+			if (asprintf(&BKrequestcount,
+					 "SELECT count(distinct o.DETAIL_ID) "
+					 "from bk f left join DETAILS d on (d.ID = f.DETAIL_ID) "
+					 "left join OBJECTS o on (f.DETAIL_ID = o.DETAIL_ID) "
+						 "where o.REF_ID is NULL and o.OBJECT_ID glob '*$*' and f.CONTENT MATCH '%s'",
+						 bksearchtranslated) == -1)
+				BKrequestcount = NULL;
+		BKfailed:
+			if (BKrequest && BKrequestcount)
+			{
+				BKcustomization = 1;
+				if (!bk_bktable_exists)
+				{
+					char create_bktable_sqlite[] =
+						"CREATE VIRTUAL TABLE bk USING fts4(tokenize=unicode61, "
+						"DETAIL_ID INTEGER DEFAULT NULL, "
+						"CONTENT TEXT DEFAULT NULL);";
+					char populate_bktable_sqlite[] =
+						"INSERT INTO bk "
+						"SELECT o.DETAIL_ID, group_concat(de.TITLE, ' ') || ' ' || d.ARTIST || ' ' || d.TITLE "
+						"from "
+						"OBJECTS o "
+						"join DETAILS d on (d.ID = o.DETAIL_ID) "
+						"join OBJECTS e on (o.OBJECT_ID = e.PARENT_ID) "
+						"join DETAILS de on (de.ID = e.DETAIL_ID) "
+						"where o.OBJECT_ID glob '*$*' and e.CLASS like 'item.audioItem%%' and o.CLASS = 'container.album.musicAlbum' "
+						"group by o.DETAIL_ID;";
+					char optimize_bktable_sqlite[] = "INSERT INTO bk(bk) VALUES('optimize');";
+					int ret;
+
+					DPRINTF(E_DEBUG, L_HTTP, "create SQL: %s\n", create_bktable_sqlite);
+
+					ret = sql_exec(db, create_bktable_sqlite);
+					if (ret == SQLITE_OK)
+					{
+						DPRINTF(E_DEBUG, L_HTTP, "populate SQL: %s\n", populate_bktable_sqlite);
+						ret = sql_exec(db, populate_bktable_sqlite);
+						if (ret == SQLITE_OK)
+							{
+							DPRINTF(E_DEBUG, L_HTTP, "optimize SQL: %s\n", optimize_bktable_sqlite);
+							ret = sql_exec(db, optimize_bktable_sqlite);
+							}
+					}
+					if( ret != SQLITE_OK )
+						DPRINTF(E_ERROR, L_DB_SQL, "Error creating SQLite3 database!\n");
+					else
+						bk_bktable_exists = 1;
+				}
+	            totalMatches = sql_get_int_field(db, BKrequestcount);
+			}
+			if (bksearchtranslated)
+				free(bksearchtranslated);
+	    }
+	}
+
+	if (!BKcustomization)
+	{
+	    totalMatches = sql_get_int_field(db, "SELECT (select count(distinct DETAIL_ID)"
+	                                         " from OBJECTS o left join DETAILS d on (o.DETAIL_ID = d.ID)"
+	                                         " where (OBJECT_ID glob '%q%s') and (%s))"
+	                                         " + "
+	                                         "(select count(*) from OBJECTS o left join DETAILS d on (o.DETAIL_ID = d.ID)"
+	                                         " where (OBJECT_ID = '%q') and (%s))",
+	                                         ContainerID, sep, where, ContainerID, where);
+	}
+
 	if( totalMatches < 0 )
 	{
 		/* Must be invalid SQL, so most likely bad or unhandled search criteria. */
@@ -1786,17 +1894,23 @@ SearchContentDirectory(struct upnphttp * h, const char * action)
 		goto search_error;
 	}
 
-	sql = sqlite3_mprintf( SELECT_COLUMNS
-	                      "from OBJECTS o left join DETAILS d on (d.ID = o.DETAIL_ID)"
-	                      " where OBJECT_ID glob '%q%s' and (%s) %s "
-	                      "%z %s"
-	                      " limit %d, %d",
-	                      ContainerID, sep, where, groupBy,
-	                      (*ContainerID == '*') ? NULL :
-	                      sqlite3_mprintf("UNION ALL " SELECT_COLUMNS
-	                                      "from OBJECTS o left join DETAILS d on (d.ID = o.DETAIL_ID)"
-	                                      " where OBJECT_ID = '%q' and (%s) ", ContainerID, where),
-	                      orderBy, StartingIndex, RequestedCount);
+	if (BKcustomization)
+	    sql = BKrequest;
+	else
+	{
+	    sql = sqlite3_mprintf( SELECT_COLUMNS
+	                          "from OBJECTS o left join DETAILS d on (d.ID = o.DETAIL_ID)"
+	                          " where OBJECT_ID glob '%q%s' and (%s) %s "
+	                          "%z %s"
+	                          " limit %d, %d",
+	                          ContainerID, sep, where, groupBy,
+	                          (*ContainerID == '*') ? NULL :
+	                          sqlite3_mprintf("UNION ALL " SELECT_COLUMNS
+	                                          "from OBJECTS o left join DETAILS d on (d.ID = o.DETAIL_ID)"
+	                                          " where OBJECT_ID = '%q' and (%s) ", ContainerID, where),
+	                          orderBy, StartingIndex, RequestedCount);
+	}
+
 	DPRINTF(E_DEBUG, L_HTTP, "Search SQL: %s\n", sql);
 	ret = sqlite3_exec(db, sql, callback, (void *) &args, &zErrMsg);
 	if( (ret != SQLITE_OK) && (zErrMsg != NULL) )
@@ -1804,7 +1918,8 @@ SearchContentDirectory(struct upnphttp * h, const char * action)
 		DPRINTF(E_WARN, L_HTTP, "SQL error: %s\nBAD SQL: %s\n", zErrMsg, sql);
 		sqlite3_free(zErrMsg);
 	}
-	sqlite3_free(sql);
+	if (!BKcustomization)
+		sqlite3_free(sql);
 	ret = strcatf(&str, "&lt;/DIDL-Lite&gt;</Result>\n"
 	                    "<NumberReturned>%u</NumberReturned>\n"
 	                    "<TotalMatches>%u</TotalMatches>\n"
@@ -1816,6 +1931,10 @@ search_error:
 	ClearNameValueList(&data);
 	free(orderBy);
 	free(where);
+	if (BKrequest)
+		free(BKrequest);
+	if (BKrequestcount)
+		free(BKrequestcount);
 	free(str.data);
 }
 

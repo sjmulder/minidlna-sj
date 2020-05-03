@@ -83,4 +83,7 @@ CreateDatabase(void);
 void
 start_scanner();
 
+void bk_destroy_bktable(void);
+extern int bk_bktable_exists;
+
 #endif

@@ -358,6 +358,8 @@ inotify_insert_file(char * name, const char * path)
 	if( stat(path, &st) != 0 )
 		return -1;
 
+	bk_destroy_bktable();
+
 	ts = sql_get_int_field(db, "SELECT TIMESTAMP from DETAILS where PATH = '%q'", path);
 	if( !ts && is_playlist(path) && (sql_get_int_field(db, "SELECT ID from PLAYLISTS where PATH = '%q'", path) > 0) )
 	{
@@ -549,6 +551,7 @@ inotify_remove_file(const char * path)
 	id = sql_get_text_field(db, "SELECT ID from %s where PATH = '%q'", playlist?"PLAYLISTS":"DETAILS", path);
 	if( !id )
 		return 1;
+	bk_destroy_bktable();
 	detailID = strtoll(id, NULL, 10);
 	sqlite3_free(id);
 	if( playlist )
@@ -613,6 +616,8 @@ inotify_remove_directory(int fd, const char * path)
 	char **result;
 	int64_t detailID = 0;
 	int rows, i, ret = 1;
+
+	bk_destroy_bktable();
 
 	/* Invalidate the scanner cache so we don't insert files into non-existent containers */
 	valid_cache = 0;

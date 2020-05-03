@@ -275,6 +275,8 @@ open_db(sqlite3 **sq3)
 	sql_exec(db, "pragma journal_mode = OFF");
 	sql_exec(db, "pragma synchronous = OFF;");
 	sql_exec(db, "pragma default_cache_size = 8192;");
+	bk_bktable_exists = sql_get_int_field(db, "SELECT count(name) FROM sqlite_master WHERE type='table' AND name='bk'");
+	DPRINTF(E_WARN, L_GENERAL, "bktable_exists = %d\n", bk_bktable_exists);
 
 	return new_db;
 }

@@ -57,6 +57,7 @@ typedef struct dirent scan_filter;
 #endif
 
 int valid_cache = 0;
+int bk_bktable_exists;
 
 struct virtual_item
 {
@@ -572,6 +573,7 @@ CreateDatabase(void)
 	ret = sql_exec(db, "INSERT into SETTINGS values ('UPDATE_ID', '0')");
 	if( ret != SQLITE_OK )
 		goto sql_failed;
+	bk_bktable_exists = 0;
 	for( i=0; containers[i]; i=i+3 )
 	{
 		ret = sql_exec(db, "INSERT into OBJECTS (OBJECT_ID, PARENT_ID, DETAIL_ID, CLASS, NAME)"
@@ -843,6 +845,8 @@ start_scanner()
 	struct media_dir_s *media_path;
 	char path[MAXPATHLEN];
 
+	bk_destroy_bktable();
+
 	if (setpriority(PRIO_PROCESS, 0, 15) == -1)
 		DPRINTF(E_WARN, L_INOTIFY,  "Failed to reduce scanner thread priority\n");
 	_notify_start();
@@ -891,4 +895,13 @@ start_scanner()
 	DPRINTF(E_DEBUG, L_SCANNER, "Initial file scan completed\n");
 	//JM: Set up a db version number, so we know if we need to rebuild due to a new structure.
 	sql_exec(db, "pragma user_version = %d;", DB_VERSION);
+}
+
+void bk_destroy_bktable(void)
+{
+	if (bk_bktable_exists)
+	{
+		sql_exec(db, "DROP TABLE bk");
+		bk_bktable_exists = 0;
+	}
 }
