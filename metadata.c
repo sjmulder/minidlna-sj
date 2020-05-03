@@ -336,11 +336,55 @@ GetAudioMetadata(const char *path, char *name)
 		strcpy(type, "wav");
 		m.mime = strdup("audio/x-wav");
 	}
-	else if( ends_with(path, ".ogg") || ends_with(path, ".oga") )
+	else if( ends_with(path,".oga") || ends_with(path,".ogg"))
 	{
+		/* The .ogg/.oga file extensions present something of a problem.
+		 * ".ogg" has been deprecated in favor of ".oga" for some time, but
+		 * many applications still only recognize ".ogg".
+		 *
+		 * This examines the file and causes .ogg to be presented for any naked
+		 * Vorbis file (MIME type audio/ogg; codecs=vorbis) and .oga
+		 * (audio/ogg) to be used for everything else.  This is in line with
+		 * the official ogg naming conventions and, hopefully, makes for a
+		 * resonable compromise.
+		 */
+		uint8_t oggtestbuf[35];
+		FILE *oggfile = fopen (path, "rb");
+
+		if (oggfile == (FILE *)NULL)
+		{
+			DPRINTF(E_ERROR, L_METADATA, "Error opening %s\n", path);
+			return 0;
+		}
+
+		if (fread (oggtestbuf, 1, 35, oggfile) != 35)
+		{
+			DPRINTF(E_WARN, L_METADATA, "Premature EOF on %s\n", path);
+			fclose (oggfile);
+			return 0;
+		}
+		fclose (oggfile);
+
+		if (memcmp (&oggtestbuf[28], "\x01vorbis", 7))
+			m.mime = strdup ("audio/ogg");
+		else
+			m.mime = strdup ("audio/ogg; codecs=vorbis");
+
 		strcpy(type, "ogg");
-		m.mime = strdup("audio/ogg");
 	}
+	else if ( ends_with(path, ".opus") )
+	{
+		strcpy(type,"ops");
+		m.mime = strdup("audio/ogg; codecs=opus");
+	}
+#if 0
+	/* Not supported yet, and probably won't be. */
+	else if( ends_with(path, ".ogx") )
+	{
+		strcpy(type, "ogx");
+		m.mime = strdup("application/ogg");
+	}
+#endif
 	else if( ends_with(path, ".pcm") )
 	{
 		strcpy(type, "pcm");
@@ -843,6 +887,8 @@ GetVideoMetadata(const char *path, char *name)
 			xasprintf(&m.mime, "video/x-matroska");
 		else if( strcmp(ctx->iformat->name, "flv") == 0 )
 			xasprintf(&m.mime, "video/x-flv");
+		else if( strcmp(ctx->iformat->name, "ogg") == 0 )
+			xasprintf(&m.mime, "video/ogg");
 		if( m.mime )
 			goto video_no_dlna;
 

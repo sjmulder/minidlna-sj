@@ -39,6 +39,10 @@
 #endif
 #include <FLAC/metadata.h>
 
+#ifdef HAVE_OPUS
+#include <opus/opusfile.h>
+#endif
+
 #ifdef HAVE_ICONV
 #include <iconv.h>
 #endif
@@ -107,6 +111,9 @@ char *winamp_genre[] = {
 #ifdef HAVE_VORBISFILE
 #include "tagutils-ogg.h"
 #endif
+#ifdef HAVE_OPUS
+#include "tagutils-opus.h"
+#endif
 #include "tagutils-flc.h"
 #include "tagutils-asf.h"
 #include "tagutils-wav.h"
@@ -133,6 +140,9 @@ static taghandler taghandlers[] = {
 #ifdef HAVE_VORBISFILE
 	{ "ogg", 0,            _get_oggfileinfo                                  },
 #endif
+#ifdef HAVE_OPUS
+	{ "ops", 0,                             _get_opusfileinfo                                                                },
+#endif
 	{ "asf", 0,            _get_asffileinfo                                  },
 	{ "wav", _get_wavtags, _get_wavfileinfo                                  },
 	{ "pcm", 0,            _get_pcmfileinfo                                  },
@@ -147,6 +157,9 @@ static taghandler taghandlers[] = {
 #include "tagutils-aac.c"
 #ifdef HAVE_VORBISFILE
 #include "tagutils-ogg.c"
+#endif
+#ifdef HAVE_OPUS
+#include "tagutils-opus.c"
 #endif
 #include "tagutils-flc.c"
 #include "tagutils-asf.c"

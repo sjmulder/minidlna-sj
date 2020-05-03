@@ -16,6 +16,7 @@
 # USA.
 
 AM_CFLAGS = -Wall -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 @STATIC_CFLAGS@
+	    @libpng_CFLAGS@ @opus_CFLAGS@
 
 SUBDIRS=po
 
@@ -53,7 +54,8 @@ minidlnad_LDADD = \
 	@LIBEXIF_LIBS@ \
 	@LIBINTL@ \
 	@LIBICONV@ \
-	-lFLAC $(flacogglibs) $(vorbislibs) $(avahilibs)
+	-lFLAC $(flacogglibs) $(vorbislibs) $(avahilibs) \
+	@opus_LIBS@
 
 minidlnad_LDFLAGS = @STATIC_LDFLAGS@
 
