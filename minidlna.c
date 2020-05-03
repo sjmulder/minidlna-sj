@@ -434,7 +434,7 @@ rescan:
 }
 
 static int
-writepidfile(const char *fname, int pid, uid_t uid)
+writepidfile(const char *fname, int pid, uid_t uid, gid_t gid)
 {
 	FILE *pidfile;
 	struct stat st;
@@ -466,8 +466,8 @@ writepidfile(const char *fname, int pid, uid_t uid)
 		}
 		if (uid > 0)
 		{
-			if (chown(dir, uid, -1) != 0)
-				DPRINTF(E_WARN, L_GENERAL, "Unable to change pidfile %s ownership: %s\n",
+			if (chown(dir, uid, gid) != 0)
+				DPRINTF(E_WARN, L_GENERAL, "Unable to change pidfile directory [%s] ownership: %s\n",
 					dir, strerror(errno));
 		}
 	}
@@ -475,21 +475,21 @@ writepidfile(const char *fname, int pid, uid_t uid)
 	pidfile = fopen(fname, "w");
 	if (!pidfile)
 	{
-		DPRINTF(E_ERROR, L_GENERAL, "Unable to open pidfile for writing %s: %s\n",
+		DPRINTF(E_ERROR, L_GENERAL, "Unable to open pidfile [%s] for writing: %s\n",
 			fname, strerror(errno));
 		return -1;
 	}
 
 	if (fprintf(pidfile, "%d\n", pid) <= 0)
 	{
-		DPRINTF(E_ERROR, L_GENERAL, 
-			"Unable to write to pidfile %s: %s\n", fname, strerror(errno));
+		DPRINTF(E_ERROR, L_GENERAL,
+			"Unable to write to pidfile [%s]: %s\n", fname, strerror(errno));
 		ret = -1;
 	}
 	if (uid > 0)
 	{
-		if (fchown(fileno(pidfile), uid, -1) != 0)
-			DPRINTF(E_WARN, L_GENERAL, "Unable to change pidfile %s ownership: %s\n",
+		if (fchown(fileno(pidfile), uid, gid) != 0)
+			DPRINTF(E_WARN, L_GENERAL, "Unable to change pidfile [%s] ownership: %s\n",
 				fname, strerror(errno));
 	}
 
@@ -1052,24 +1052,24 @@ init(int argc, char **argv)
 	if (sigaction(SIGCHLD, &sa, NULL))
 		DPRINTF(E_FATAL, L_GENERAL, "Failed to set %s handler. EXITING.\n", "SIGCHLD");
 
-	if (writepidfile(pidfilename, pid, uid) != 0)
+	if (writepidfile(pidfilename, pid, uid, gid) != 0)
 		pidfilename = NULL;
 
 	if (uid > 0)
 	{
 		struct stat st;
-		if (stat(db_path, &st) == 0 && st.st_uid != uid && chown(db_path, uid, -1) != 0)
-			DPRINTF(E_ERROR, L_GENERAL, "Unable to set db_path [%s] ownership to %d: %s\n",
-				db_path, uid, strerror(errno));
+		if (stat(db_path, &st) == 0 && st.st_uid != uid && chown(db_path, uid, gid) != 0)
+			DPRINTF(E_ERROR, L_GENERAL, "Unable to set db_path [%s] ownership to uid '%d', gid '%d': %s\n",
+				db_path, uid, gid, strerror(errno));
+
+		if (setgid(gid) == -1)
+			DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to gid '%d'. [%s] EXITING.\n",
+				gid, strerror(errno));
+
+		if (setuid(uid) == -1)
+			DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to uid '%d'. [%s] EXITING.\n",
+				uid, strerror(errno));
 	}
-
-	if (gid > 0 && setgid(gid) == -1)
-		DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to gid '%d'. [%s] EXITING.\n",
-			gid, strerror(errno));
-
-	if (uid > 0 && setuid(uid) == -1)
-		DPRINTF(E_FATAL, L_GENERAL, "Failed to switch to uid '%d'. [%s] EXITING.\n",
-			uid, strerror(errno));
 
 	children = calloc(runtime_vars.max_connections, sizeof(struct child));
 	if (!children)
